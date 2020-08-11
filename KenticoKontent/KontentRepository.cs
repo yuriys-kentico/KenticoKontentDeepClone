@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -37,6 +38,8 @@ namespace KenticoKontent
 
         public int ApiCalls { get; private set; }
 
+        public IDictionary<string, object> CacheDictionary { get; } = new ConcurrentDictionary<string, object>();
+
         public KontentRepository(
             HttpClient httpClient,
             Settings settings
@@ -44,6 +47,8 @@ namespace KenticoKontent
         {
             this.httpClient = httpClient;
             this.settings = settings;
+
+            this.httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", settings.ManagementApiKey);
         }
 
         public async Task PrepareDeepClone(PrepareItemParameters prepareItemParameters)
@@ -194,36 +199,44 @@ namespace KenticoKontent
             return itemVariant;
         }
 
-        public string GetExternalId()
-        {
-            return Guid.NewGuid().ToString();
-        }
+        public string GetExternalId() => Guid.NewGuid().ToString();
 
         public async Task<ContentItem> RetrieveContentItem(Reference itemReference)
         {
-            var requestUri = ConfigureClient($"items/{itemReference}");
+            return await Cache(
+                () => WithRetry(() => Get($"items/{itemReference}")),
+                itemReference,
+                async response =>
+            {
+                await ThrowIfNotSuccessStatusCode(response);
 
-            var response = await WithRetry(httpClient.GetAsync(requestUri));
-
-            await ThrowIfNotSuccessStatusCode(response);
-
-            return await response.Content.ReadAsAsync<ContentItem>();
+                return await response.Content.ReadAsAsync<ContentItem>();
+            });
         }
 
         public async Task<LanguageVariant?> RetrieveLanguageVariant(RetrieveLanguageVariantParameters retrieveLanguageVariantParameters)
         {
             var (itemReference, typeReference, languageReference) = retrieveLanguageVariantParameters;
 
-            var requestUri = ConfigureClient($"items/{itemReference}/variants/{languageReference}");
+            var variant = await Cache(
+                () => WithRetry(() => Get($"items/{itemReference}/variants/{languageReference}")),
+                itemReference + languageReference,
+                async response =>
+            {
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
 
-            var response = await WithRetry(httpClient.GetAsync(requestUri));
+                await ThrowIfNotSuccessStatusCode(response);
 
-            if (response.StatusCode == HttpStatusCode.NotFound)
+                return await response.Content.ReadAsAsync<LanguageVariant>();
+            });
+
+            if (variant == null)
             {
                 return null;
             }
-
-            await ThrowIfNotSuccessStatusCode(response);
 
             var itemTypeElements = new HashSet<ElementType>();
 
@@ -250,8 +263,6 @@ namespace KenticoKontent
                     itemTypeElements.UnionWith(itemTypeSnippet.Elements);
                 }
             }
-
-            var variant = await response.Content.ReadAsAsync<LanguageVariant>();
 
             variant.Elements = variant.Elements.Select(element =>
             {
@@ -283,31 +294,33 @@ namespace KenticoKontent
 
         public async Task<ContentType> RetrieveContentType(Reference typeReference)
         {
-            var requestUri = ConfigureClient($"types/{typeReference}");
+            return await Cache(
+                () => WithRetry(() => Get($"types/{typeReference}")),
+                typeReference,
+                async response =>
+            {
+                await ThrowIfNotSuccessStatusCode(response);
 
-            var response = await WithRetry(httpClient.GetAsync(requestUri));
-
-            await ThrowIfNotSuccessStatusCode(response);
-
-            return await response.Content.ReadAsAsync<ContentType>();
+                return await response.Content.ReadAsAsync<ContentType>();
+            });
         }
 
         public async Task<ContentType> RetrieveContentTypeSnippet(Reference typeReference)
         {
-            var requestUri = ConfigureClient($"snippets/{typeReference}");
+            return await Cache(
+                () => WithRetry(() => Get($"snippets/{typeReference}")),
+                typeReference,
+                async response =>
+            {
+                await ThrowIfNotSuccessStatusCode(response);
 
-            var response = await WithRetry(httpClient.GetAsync(requestUri));
-
-            await ThrowIfNotSuccessStatusCode(response);
-
-            return await response.Content.ReadAsAsync<ContentType>();
+                return await response.Content.ReadAsAsync<ContentType>();
+            });
         }
 
         public async Task<ContentItem> UpsertContentItem(ContentItem contentItem)
         {
-            var requestUri = ConfigureClient($"items/{new ExternalIdReference(contentItem.ExternalId!)}");
-
-            var response = await WithRetry(PutAsJsonAsync(requestUri, contentItem));
+            var response = await WithRetry(() => Put($"items/{new ExternalIdReference(contentItem.ExternalId!)}", contentItem));
 
             await ThrowIfNotSuccessStatusCode(response);
 
@@ -318,16 +331,16 @@ namespace KenticoKontent
         {
             var (language, variant) = upsertLanguageVariantParameters;
 
-            var requestUri = ConfigureClient($"items/{variant.ItemReference}/variants/{language}");
-
-            var response = await WithRetry(PutAsJsonAsync(requestUri, variant));
+            var response = await WithRetry(() => Put($"items/{variant.ItemReference}/variants/{language}", variant));
 
             await ThrowIfNotSuccessStatusCode(response);
         }
 
-        private async Task<HttpResponseMessage> PutAsJsonAsync(string requestUri, object? value = default)
+        private async Task<HttpResponseMessage> Get(string relativePath) => await httpClient.GetAsync(GetEndpoint(relativePath));
+
+        private async Task<HttpResponseMessage> Put(string relativePath, object? value = default)
         {
-            var response = await httpClient.PutAsync(requestUri, value, new JsonMediaTypeFormatter()
+            var response = await httpClient.PutAsync(GetEndpoint(relativePath), value, new JsonMediaTypeFormatter()
             {
                 SerializerSettings =
                 {
@@ -338,7 +351,7 @@ namespace KenticoKontent
             return response;
         }
 
-        private async Task<HttpResponseMessage> WithRetry(Task<HttpResponseMessage> doRequest)
+        private async Task<HttpResponseMessage> WithRetry(Func<Task<HttpResponseMessage>> doRequest)
         {
             static async Task CheckQueue(Queue<DateTime> queue, TimeSpan span, int max)
             {
@@ -367,7 +380,7 @@ namespace KenticoKontent
             await CheckQueue(minutesQueue, TimeSpan.FromMinutes(1), minutesMax);
             await CheckQueue(secondsQueue, TimeSpan.FromSeconds(1), secondsMax);
 
-            var response = await doRequest;
+            var response = await doRequest();
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests && response.Headers.RetryAfter.Delta != null)
             {
@@ -381,14 +394,24 @@ namespace KenticoKontent
             return response;
         }
 
-        private string ConfigureClient(string? endpoint = default)
+        private async Task<TOut> Cache<TIn, TOut>(Func<Task<TIn>> doRequest, string key, Func<TIn, Task<TOut>> getItem) where TOut : class?
         {
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", settings.ManagementApiKey);
+            if (CacheDictionary.TryGetValue(key, out var item) && item is TOut tItem)
+            {
+                return tItem;
+            }
 
-            var projectId = settings.ProjectId;
+            var newItem = await getItem(await doRequest());
 
-            return $@"https://manage.kontent.ai/v2/projects/{projectId}/{endpoint}";
+            if (newItem != null)
+            {
+                CacheDictionary.Add(key, newItem);
+            }
+
+            return newItem;
         }
+
+        private string GetEndpoint(string? endpoint = default) => $@"https://manage.kontent.ai/v2/projects/{settings.ProjectId}/{endpoint}";
 
         private static async Task ThrowIfNotSuccessStatusCode(HttpResponseMessage response)
         {
