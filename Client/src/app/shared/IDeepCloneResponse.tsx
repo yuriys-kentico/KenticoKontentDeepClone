@@ -1,4 +1,4 @@
-import { IContentItem } from '../element/DeepClone';
+import { IContentItem } from './models/management/IContentItem';
 
 export interface IDeepCloneResponse {
   totalApiCalls: number;

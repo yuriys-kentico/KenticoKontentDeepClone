@@ -8,23 +8,14 @@ import { kenticoKontent } from '../../appSettings.json';
 import { element } from '../../terms.en-us.json';
 import { loadModule } from '../../utilities/modules';
 import { Loading } from '../Loading';
-import { IContext } from '../shared/IContext';
-import { ICustomElement } from '../shared/ICustomElement';
 import { IDeepCloneConfig } from '../shared/IDeepCloneConfig';
 import { IDeepCloneResponse } from '../shared/IDeepCloneResponse';
+import { IContext } from '../shared/models/customElement/IContext';
+import { ICustomElement } from '../shared/models/customElement/ICustomElement';
+import { IContentItem } from '../shared/models/management/IContentItem';
 
 // Expose access to Kentico custom element API
 declare const CustomElement: ICustomElement<IDeepCloneConfig>;
-
-export interface IContentItem {
-  id: string;
-  name: string;
-  codename: string;
-  type: {
-    id: string;
-  };
-  external_id: string;
-}
 
 const useStyles = makeStyles(() =>
   createStyles({
@@ -162,6 +153,7 @@ export const DeepClone: FC = () => {
                           <a
                             href={`https://app.kontent.ai/${customElementContext.projectId}/content-inventory/${customElementContext.variant.id}/content/${item.id}`}
                             target='_blank'
+                            rel='noopener noreferrer'
                           >
                             {item.name}
                           </a>
