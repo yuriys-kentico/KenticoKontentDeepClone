@@ -4,6 +4,8 @@ Sample custom element and Azure Function code that uses the Kontent Management A
 
 The code in this repository is configured for Azure Functions, however it can be lifted to any web application running ASP.NET Core 3.1.
 
+![KontentDeepClone](https://user-images.githubusercontent.com/34716163/96483697-22568300-120a-11eb-87ce-4c0e7800d04f.gif)
+
 ## Setup
 
 1. Deploy the Azure Function code in `Functions.sln` to an Azure Function. See the [Function Settings](#function-settings) section for additional configuration steps.
