@@ -60,7 +60,7 @@ export const DeepClone: FC = () => {
 
   useEffect(() => {
     if (available) {
-      CustomElement.setHeight(document.documentElement.scrollHeight);
+      CustomElement.setHeight(document.documentElement.offsetHeight);
     }
   });
 
