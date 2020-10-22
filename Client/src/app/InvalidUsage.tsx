@@ -1,11 +1,24 @@
 ﻿import React from 'react';
 
-import { kenticoKontent } from '../appSettings.json';
+import { createStyles, makeStyles } from '@material-ui/styles';
 
-export const InvalidUsage = () => (
-  <div className='invalidUsage'>
-    <span>
-      Please read this: <a href={kenticoKontent.documentationUrl}>What to do with the URL to this page</a>.
-    </span>
-  </div>
+import { kenticoKontent } from '../appSettings.json';
+import { shared } from '../terms.en-us.json';
+
+const useStyles = makeStyles(() =>
+  createStyles({
+    root: { margin: '1em' },
+  })
 );
+
+export const InvalidUsage = () => {
+  const styles = useStyles();
+
+  return (
+    <div className={styles.root}>
+      <span>
+        {shared.pleaseRead} <a href={kenticoKontent.documentationUrl}>{shared.whatToDo}</a>.
+      </span>
+    </div>
+  );
+};

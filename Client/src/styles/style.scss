@@ -1,26 +1,3 @@
-html,
-body,
-#root,
-#root > div {
-  height: 100%;
-}
-
-body {
-  overflow: hidden;
-}
-
-.invalidUsage {
-  margin: 1em;
-}
-
-.errorBoundary {
-  margin: 1em;
-
-  span {
-    white-space: pre;
-  }
-}
-
 .loadingWrapper {
   display: flex;
   height: 100%;

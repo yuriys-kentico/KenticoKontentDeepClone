@@ -1,5 +1,7 @@
 import React, { FC } from 'react';
 
+import { createStyles, makeStyles } from '@material-ui/styles';
+
 import { errors } from '../terms.en-us.json';
 
 interface IErrorProps {
@@ -7,7 +9,15 @@ interface IErrorProps {
   stack?: string;
 }
 
+const useStyles = makeStyles(() =>
+  createStyles({
+    span: { whiteSpace: 'pre' },
+  })
+);
+
 export const Error: FC<IErrorProps> = ({ message, stack }) => {
+  const styles = useStyles();
+
   let errorMessage: IErrorProps = { message: errors.genericError, stack: errors.genericStack };
 
   message && (errorMessage.message = message);
@@ -16,7 +26,7 @@ export const Error: FC<IErrorProps> = ({ message, stack }) => {
   return (
     <>
       <h1>{errorMessage.message}</h1>
-      <span>{errorMessage.stack}</span>
+      <span className={styles.span}>{errorMessage.stack}</span>
     </>
   );
 };

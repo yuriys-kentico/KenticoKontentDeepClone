@@ -3,6 +3,11 @@
     "genericError": "A generic error has occurred.",
     "genericStack": "No error information."
   },
+  "shared": {
+    "pleaseRead": "Please read this: ",
+    "whatToDo": "What to do with the URL to this page",
+    "download": "Download"
+  },
   "element": {
     "title": "Deep Clone",
     "enabledDescription": "Click the button to make a deep clone of this item.",
